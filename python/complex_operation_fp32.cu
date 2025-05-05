@@ -5,27 +5,25 @@
 #include <numpy/arrayobject.h>
 #include <time.h>
 
+// change to npy_float64 for more precision
+typedef npy_float32 cufloat;
+const int CUFLOAT = NPY_FLOAT32;
+
 // Calculates the dot product sum for a single complex coefficient.
 // Run with a dim3.
-__global__ void matmul_elem(const npy_intp N, const npy_complex128 *a,
-                            const npy_complex128 *b, npy_complex128 *dest) {
+__global__ void matmul_elem(const npy_intp N, const cufloat *a,
+                            const cufloat *b, cufloat *dest) {
   const int row = blockIdx.x * blockDim.x + threadIdx.x;
   const int column = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (column < N && row < N) {
-    double dot_product_real = 0.f;
-    double dot_product_imag = 0.f;
+    double dot_product = 0.f;
 
     for (int i = 0; i < N; i++) {
-      const npy_complex128 a_i = a[row * N + i];
-      const npy_complex128 b_i = b[i * N + column];
-
-      dot_product_real += a_i._Val[0] * b_i._Val[0] - a_i._Val[1] * b_i._Val[1];
-      dot_product_imag += a_i._Val[0] * b_i._Val[1] + a_i._Val[1] * b_i._Val[0];
+      dot_product += a[row * N + i] * b[i * N + column];
     }
 
-    dest[row * N + column]._Val[0] = dot_product_real;
-    dest[row * N + column]._Val[1] = dot_product_imag;
+    dest[row * N + column] = dot_product;
   }
 }
 
@@ -33,23 +31,18 @@ __global__ void matmul_elem(const npy_intp N, const npy_complex128 *a,
 // Run with a dim1. Assumes b is diagonal.
 // PERF : Could probably benefit from better caching by idexing by column
 // instead of row, so the destination matrix would be filled row by row.
-__global__ void matmul_diag_elem(const npy_intp N, const npy_complex128 *a,
-                                 const npy_complex128 *b,
-                                 npy_complex128 *dest) {
+__global__ void matmul_diag_elem(const npy_intp N, const cufloat *a,
+                                 const cufloat *b, cufloat *dest) {
   const int row = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (row < N) {
     for (int column = 0; column < N; column++) {
-      const npy_complex128 a_i = a[row * N + column];
-      const npy_complex128 b_i = b[column * N + column];
+      const cufloat a_i = a[row * N + column];
+      const cufloat b_i = b[column * N + column];
 
-      double dot_product_real =
-          a_i._Val[0] * b_i._Val[0] - a_i._Val[1] * b_i._Val[1];
-      double dot_product_imag =
-          a_i._Val[0] * b_i._Val[1] + a_i._Val[1] * b_i._Val[0];
+      double dot_product = a_i * b_i;
 
-      dest[row * N + column]._Val[0] = dot_product_real;
-      dest[row * N + column]._Val[1] = dot_product_imag;
+      dest[row * N + column] = dot_product;
     }
   }
 }
@@ -62,26 +55,24 @@ __global__ void matmul_diag_elem(const npy_intp N, const npy_complex128 *a,
  *
  * NOTE : not an optimal implementation
  */
-static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
-                              const npy_complex128 *d,
-                              const npy_complex128 *ainv,
-                              npy_complex128 *dest) {
+static void matmul_ADAinv_gpu(const npy_intp N, const cufloat *a,
+                              const cufloat *d, const cufloat *ainv,
+                              cufloat *dest) {
   printf("[matmul] Allocating and copying to device...\n");
   clock_t start = clock();
 
   // data on device
-  npy_complex128 *a_d, *d_d, *ainv_d, *sum_d;
-  cudaMalloc((void **)&a_d, N * N * sizeof(npy_complex128));
+  cufloat *a_d, *d_d, *ainv_d, *sum_d;
+  cudaMalloc((void **)&a_d, N * N * sizeof(cufloat));
   cudaMalloc((void **)&d_d,
-             N * N * sizeof(npy_complex128)); // could just be a vec
-  cudaMalloc((void **)&ainv_d, N * N * sizeof(npy_complex128));
-  cudaMalloc((void **)&sum_d, N * N * sizeof(npy_complex128));
+             N * N * sizeof(cufloat)); // could just be a vec
+  cudaMalloc((void **)&ainv_d, N * N * sizeof(cufloat));
+  cudaMalloc((void **)&sum_d, N * N * sizeof(cufloat));
 
   // copy data from host to device
-  cudaMemcpy(a_d, a, N * N * sizeof(npy_complex128), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_d, d, N * N * sizeof(npy_complex128), cudaMemcpyHostToDevice);
-  cudaMemcpy(ainv_d, ainv, N * N * sizeof(npy_complex128),
-             cudaMemcpyHostToDevice);
+  cudaMemcpy(a_d, a, N * N * sizeof(cufloat), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_d, d, N * N * sizeof(cufloat), cudaMemcpyHostToDevice);
+  cudaMemcpy(ainv_d, ainv, N * N * sizeof(cufloat), cudaMemcpyHostToDevice);
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -110,7 +101,7 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
   printf("[matmul] Done calculating, retrieving data and freeing...\n");
 
   // copy data from devices to host
-  cudaMemcpy(dest, a_d, N * N * sizeof(npy_complex128), cudaMemcpyDeviceToHost);
+  cudaMemcpy(dest, a_d, N * N * sizeof(cufloat), cudaMemcpyDeviceToHost);
 
   cudaFree(a_d);
   cudaFree(d_d);
@@ -140,11 +131,9 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   // Get the array and ensure it is of complex type
   // increases refcount to array.
   PyArrayObject *array = (PyArrayObject *)PyArray_FROM_OTF(
-      input_array, NPY_COMPLEX128,
-      NPY_ARRAY_WRITEABLE | NPY_ARRAY_C_CONTIGUOUS);
+      input_array, CUFLOAT, NPY_ARRAY_WRITEABLE | NPY_ARRAY_C_CONTIGUOUS);
   if (array == NULL) {
-    PyErr_SetString(PyExc_TypeError,
-                    "Input array must contain complex128 values");
+    PyErr_SetString(PyExc_TypeError, "Input array must contain float32 values");
     return NULL;
   }
 
@@ -160,24 +149,15 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   }
 
   // Get a pointer to the data
-  const npy_complex128 *data = (npy_complex128 *)PyArray_DATA(array);
+  const cufloat *data = (cufloat *)PyArray_DATA(array);
 
-  // Perform some operation on the data
-  for (npy_intp i = 0; i < size; ++i) {
-    // data[i] = data[i] * 2.0; // Example operation: multiply each element by 2
-  }
-
+  // Create result matrix
   PyObject *result_matrix_object =
       PyArray_NewLikeArray(array, NPY_CORDER, NULL, 1);
   const PyArrayObject *result_matrix_array =
       (PyArrayObject *)result_matrix_object;
   // Get a pointer to the data
-  npy_complex128 *result_matrix =
-      (npy_complex128 *)PyArray_DATA(result_matrix_array);
-  for (npy_intp i = 0; i < size; ++i) {
-    result_matrix[i]._Val[0] = 2.0;
-    result_matrix[i]._Val[1] = 3.5;
-  }
+  cufloat *result_matrix = (cufloat *)PyArray_DATA(result_matrix_array);
 
   matmul_ADAinv_gpu(dimensions[0], data, data, data, result_matrix);
 

@@ -18,7 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 include_directories(/usr/lib/x86_64-linux-gnu/python3-numpy/numpy/_core/include/)
 include_directories(/usr/include/python3.13/)
 
-add_library(complex_operation SHARED complex_operation.cu)
+add_library(complex_operation SHARED complex_operation_fp32.cu)
 
 # Request that the lib be built with -std=c++11
 # As this is a public compile feature anything that links to 
