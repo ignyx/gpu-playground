@@ -28,42 +28,86 @@ __global__ void matmul_elem(const npy_intp N, const npy_complex128 *a,
   }
 }
 
+// Calculates the dot product sum for a single complex coefficient.
+// Run with a dim1. Assumes b is diagonal.
+// PERF : Could probably benefit from better caching by idexing by column
+// instead of row, so the destination matrix would be filled row by row.
+__global__ void matmul_diag_elem(const npy_intp N, const npy_complex128 *a,
+                                 const npy_complex128 *b,
+                                 npy_complex128 *dest) {
+  const int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < N) {
+    for (int column = 0; column < N; column++) {
+      const npy_complex128 a_i = a[row * N + column];
+      const npy_complex128 b_i = b[column * N + column];
+
+      double dot_product_real =
+          a_i._Val[0] * b_i._Val[0] - a_i._Val[1] * b_i._Val[1];
+      double dot_product_imag =
+          a_i._Val[0] * b_i._Val[1] + a_i._Val[1] * b_i._Val[0];
+
+      dest[row * N + column]._Val[0] = dot_product_real;
+      dest[row * N + column]._Val[1] = dot_product_imag;
+    }
+  }
+}
+
 /**
- * Multiply two square matrices a*b of dimensions n*n
+ * Multiply A * D * Ainv square matrices of dimensions N * N
+ *
+ * D is a diagonal matrix.
+ * Ainv is the inverse matrix of A.
  *
  * NOTE : not an optimal implementation
  */
-static void matmul_gpu(const npy_intp N, const npy_complex128 *a,
-                       const npy_complex128 *b, npy_complex128 *dest) {
+static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
+                              const npy_complex128 *d,
+                              const npy_complex128 *ainv,
+                              npy_complex128 *dest) {
   printf("[matmul] Allocating and copying to device...\n");
 
   // data on device
-  npy_complex128 *a_d, *b_d, *sum_d;
+  npy_complex128 *a_d, *d_d, *ainv_d, *sum_d;
   cudaMalloc((void **)&a_d, N * N * sizeof(npy_complex128));
-  cudaMalloc((void **)&b_d, N * N * sizeof(npy_complex128));
+  cudaMalloc((void **)&d_d,
+             N * N * sizeof(npy_complex128)); // could just be a vec
+  cudaMalloc((void **)&ainv_d, N * N * sizeof(npy_complex128));
   cudaMalloc((void **)&sum_d, N * N * sizeof(npy_complex128));
 
   // copy data from host to device
   cudaMemcpy(a_d, a, N * N * sizeof(npy_complex128), cudaMemcpyHostToDevice);
-  cudaMemcpy(b_d, b, N * N * sizeof(npy_complex128), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_d, d, N * N * sizeof(npy_complex128), cudaMemcpyHostToDevice);
+  cudaMemcpy(ainv_d, ainv, N * N * sizeof(npy_complex128),
+             cudaMemcpyHostToDevice);
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
 
   printf("[matmul] Copied data to device. Calculating...\n");
 
+  // calculate sum = A * D
+  const int BLOCK_SIZE_DIAG = 1024; // should be <= 1024 I think
+  matmul_diag_elem<<<ceil(N / (float)BLOCK_SIZE_DIAG), BLOCK_SIZE_DIAG>>>(
+      N, a_d, d_d, sum_d);
+  gpuErrchk(cudaPeekAtLastError());
+  gpuErrchk(cudaDeviceSynchronize());
+
+  // calculate A = sum * Ainv
   const int BLOCK_SIZE = 32; // because 32**2 = 1024 threads
   dim3 dimGrid(ceil(N / (float)BLOCK_SIZE), ceil(N / (float)BLOCK_SIZE), 1);
   dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE, 1);
-  matmul_elem<<<dimGrid, dimBlock>>>(N, a_d, b_d, sum_d);
+  matmul_elem<<<dimGrid, dimBlock>>>(N, sum_d, ainv_d, a_d);
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
+
   printf("[matmul] Done calculating, retrieving data and freeing...\n");
 
-  cudaMemcpy(dest, sum_d, N * N * sizeof(npy_complex128),
-             cudaMemcpyDeviceToHost);
+  // copy data from devices to host
+  cudaMemcpy(dest, a_d, N * N * sizeof(npy_complex128), cudaMemcpyDeviceToHost);
 
   cudaFree(a_d);
-  cudaFree(b_d);
+  cudaFree(d_d);
+  cudaFree(ainv_d);
   cudaFree(sum_d);
   printf("[matmul] Done.\n");
 }
@@ -125,7 +169,7 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
     result_matrix[i]._Val[1] = 3.5;
   }
 
-  matmul_gpu(dimensions[0], data, data, result_matrix);
+  matmul_ADAinv_gpu(dimensions[0], data, data, data, result_matrix);
 
   // printf("Refcount to input_array before free: %d\n",
   // Py_REFCNT(input_array)); printf("Refcount to array before free: %d\n",

@@ -18,8 +18,7 @@ class TestComplexOperation(unittest.TestCase):
         result = complexmodule.complex_operation(A)
         end_gpu = time()
 
-        expected = A.dot(A)
-        # expected = A.dot(np.diag(np.diag(A))).dot(np.linalg.inv(A))
+        expected = A.dot(np.diag(np.diag(A))).dot(A)
         end_cpu = time()
 
         print(f"GPU took {format(end_gpu-start, '.6f')} sec")
