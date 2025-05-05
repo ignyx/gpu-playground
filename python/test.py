@@ -15,6 +15,7 @@ array = np.array([[1+2j, 3+4j], [5+6j, 7+8j]], dtype=np.complex128)
 result = complexmodule.complex_operation(array)
 
 print(result)
+print(array.dot(array))
 
 if __name__ == '__main__':
     unittest.main()
