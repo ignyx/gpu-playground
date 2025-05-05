@@ -3,6 +3,7 @@
 #include "numpy/ndarraytypes.h"
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <time.h>
 
 // Calculates the dot product sum for a single complex coefficient.
 // Run with a dim3.
@@ -66,6 +67,7 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
                               const npy_complex128 *ainv,
                               npy_complex128 *dest) {
   printf("[matmul] Allocating and copying to device...\n");
+  clock_t start = clock();
 
   // data on device
   npy_complex128 *a_d, *d_d, *ainv_d, *sum_d;
@@ -83,6 +85,7 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
 
+  clock_t end_alloc = (clock() - start) * 1000 / CLOCKS_PER_SEC;
   printf("[matmul] Copied data to device. Calculating...\n");
 
   // calculate sum = A * D
@@ -92,6 +95,8 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
 
+  clock_t end_diag = (clock() - start) * 1000 / CLOCKS_PER_SEC;
+
   // calculate A = sum * Ainv
   const int BLOCK_SIZE = 32; // because 32**2 = 1024 threads
   dim3 dimGrid(ceil(N / (float)BLOCK_SIZE), ceil(N / (float)BLOCK_SIZE), 1);
@@ -99,6 +104,8 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
   matmul_elem<<<dimGrid, dimBlock>>>(N, sum_d, ainv_d, a_d);
   gpuErrchk(cudaPeekAtLastError());
   gpuErrchk(cudaDeviceSynchronize());
+
+  clock_t end_mul = (clock() - start) * 1000 / CLOCKS_PER_SEC;
 
   printf("[matmul] Done calculating, retrieving data and freeing...\n");
 
@@ -109,7 +116,10 @@ static void matmul_ADAinv_gpu(const npy_intp N, const npy_complex128 *a,
   cudaFree(d_d);
   cudaFree(ainv_d);
   cudaFree(sum_d);
-  printf("[matmul] Done.\n");
+
+  clock_t end_free = (clock() - start) * 1000 / CLOCKS_PER_SEC;
+  printf("[matmul] Done. alloc=%ldms, diag=%ldms, mul=%ldms, free=%ldms\n",
+         end_alloc, end_diag, end_mul, end_free);
 }
 
 // Function to perform an operation on a complex NumPy array
