@@ -154,8 +154,7 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   // Create result matrix
   PyObject *result_matrix_object =
       PyArray_NewLikeArray(array, NPY_CORDER, NULL, 1);
-  const PyArrayObject *result_matrix_array =
-      (PyArrayObject *)result_matrix_object;
+  PyArrayObject *result_matrix_array = (PyArrayObject *)result_matrix_object;
   // Get a pointer to the data
   cufloat *result_matrix = (cufloat *)PyArray_DATA(result_matrix_array);
 
