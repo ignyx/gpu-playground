@@ -1,6 +1,7 @@
 import numpy as np
 import complexmodule
 import unittest
+from time import time
 
 class TestComplexOperation(unittest.TestCase):
     def test_ensure_square(self):
@@ -13,10 +14,16 @@ class TestComplexOperation(unittest.TestCase):
         matrix = np.random.rand(DIM, DIM) + 1j * np.random.rand(DIM, DIM)
         A = matrix.astype(np.complex128)
 
+        start = time()
         result = complexmodule.complex_operation(A)
+        end_gpu = time()
+
         expected = A.dot(A)
         # expected = A.dot(np.diag(np.diag(A))).dot(np.linalg.inv(A))
+        end_cpu = time()
 
+        print(f"GPU took {format(end_gpu-start, '.6f')} sec")
+        print(f"CPU took {format(end_cpu-start, '.6f')} sec")
         np.testing.assert_allclose(result, expected)
 
 # Create a complex NumPy array
