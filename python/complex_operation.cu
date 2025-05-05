@@ -19,10 +19,13 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   }
 
   // Get the array and ensure it is of complex type
+  // increases refcount to array.
   PyArrayObject *array = (PyArrayObject *)PyArray_FROM_OTF(
       input_array, NPY_COMPLEX128,
       NPY_ARRAY_WRITEABLE | NPY_ARRAY_C_CONTIGUOUS);
   if (array == NULL) {
+    PyErr_SetString(PyExc_TypeError,
+                    "Input array must contain complex128 values");
     return NULL;
   }
 
@@ -45,11 +48,12 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
     // data[i] = data[i] * 2.0; // Example operation: multiply each element by 2
   }
 
+  // printf("Refcount to input_array before free: %d\n",
+  // Py_REFCNT(input_array)); printf("Refcount to array before free: %d\n",
+  // Py_REFCNT(array));
+
   // Decrease the reference count of the input array
   Py_DECREF(array);
-
-  // Return the modified array
-  Py_INCREF(input_array);
   return input_array;
 }
 
