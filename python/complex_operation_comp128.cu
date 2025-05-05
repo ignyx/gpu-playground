@@ -162,11 +162,7 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   // Get a pointer to the data
   const npy_complex128 *data = (npy_complex128 *)PyArray_DATA(array);
 
-  // Perform some operation on the data
-  for (npy_intp i = 0; i < size; ++i) {
-    // data[i] = data[i] * 2.0; // Example operation: multiply each element by 2
-  }
-
+  // Create result matrix
   PyObject *result_matrix_object =
       PyArray_NewLikeArray(array, NPY_CORDER, NULL, 1);
   const PyArrayObject *result_matrix_array =
@@ -174,10 +170,6 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   // Get a pointer to the data
   npy_complex128 *result_matrix =
       (npy_complex128 *)PyArray_DATA(result_matrix_array);
-  for (npy_intp i = 0; i < size; ++i) {
-    result_matrix[i]._Val[0] = 2.0;
-    result_matrix[i]._Val[1] = 3.5;
-  }
 
   matmul_ADAinv_gpu(dimensions[0], data, data, data, result_matrix);
 
