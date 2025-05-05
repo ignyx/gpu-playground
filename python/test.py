@@ -1,13 +1,12 @@
 import numpy as np
 import complexmodule
+import unittest
 
-
-array = np.array([[1+2j, 3+4j]], dtype=np.complex128)
-try:
-    result = complexmodule.complex_operation(array)
-    raise AssertionError("should fail for non-square matrix")
-except TypeError:
-    print("Passed non-square test")
+class TestComplexOperation(unittest.TestCase):
+    def test_ensure_square(self):
+        array = np.array([[1+2j, 3+4j]], dtype=np.complex128)
+        with self.assertRaises(TypeError):
+            result = complexmodule.complex_operation(array)
 
 # Create a complex NumPy array
 array = np.array([[1+2j, 3+4j], [5+6j, 7+8j]], dtype=np.complex128)
@@ -16,3 +15,6 @@ array = np.array([[1+2j, 3+4j], [5+6j, 7+8j]], dtype=np.complex128)
 result = complexmodule.complex_operation(array)
 
 print(result)
+
+if __name__ == '__main__':
+    unittest.main()
