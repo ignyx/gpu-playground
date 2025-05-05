@@ -1,6 +1,14 @@
 import numpy as np
 import complexmodule
 
+
+array = np.array([[1+2j, 3+4j]], dtype=np.complex128)
+try:
+    result = complexmodule.complex_operation(array)
+    raise AssertionError("should fail for non-square matrix")
+except TypeError:
+    print("Passed non-square test")
+
 # Create a complex NumPy array
 array = np.array([[1+2j, 3+4j], [5+6j, 7+8j]], dtype=np.complex128)
 

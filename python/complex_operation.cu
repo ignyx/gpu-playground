@@ -27,8 +27,15 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   }
 
   // Get the dimensions of the array
+  int dimension_count = PyArray_NDIM(array);
   npy_intp *dimensions = PyArray_DIMS(array);
   npy_intp size = PyArray_SIZE(array);
+
+  // Ensure the matrix is square
+  if (dimension_count != 2 || dimensions[0] != dimensions[1]) {
+    PyErr_SetString(PyExc_TypeError, "Input must be a square matrix");
+    return NULL;
+  }
 
   // Get a pointer to the data
   npy_complex128 *data = (npy_complex128 *)PyArray_DATA(array);
