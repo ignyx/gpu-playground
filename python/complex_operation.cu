@@ -41,11 +41,23 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
   }
 
   // Get a pointer to the data
-  npy_complex128 *data = (npy_complex128 *)PyArray_DATA(array);
+  const npy_complex128 *data = (npy_complex128 *)PyArray_DATA(array);
 
   // Perform some operation on the data
   for (npy_intp i = 0; i < size; ++i) {
     // data[i] = data[i] * 2.0; // Example operation: multiply each element by 2
+  }
+
+  PyObject *result_matrix_object =
+      PyArray_NewLikeArray(array, NPY_CORDER, NULL, 1);
+  const PyArrayObject *result_matrix_array =
+      (PyArrayObject *)result_matrix_object;
+  // Get a pointer to the data
+  npy_complex128 *result_matrix =
+      (npy_complex128 *)PyArray_DATA(result_matrix_array);
+  for (npy_intp i = 0; i < size; ++i) {
+    result_matrix[i]._Val[0] = 2.0;
+    result_matrix[i]._Val[1] = 3.5;
   }
 
   // printf("Refcount to input_array before free: %d\n",
@@ -54,7 +66,7 @@ static PyObject *complex_operation(PyObject *self, PyObject *args) {
 
   // Decrease the reference count of the input array
   Py_DECREF(array);
-  return input_array;
+  return result_matrix_object;
 }
 
 // Method definitions
